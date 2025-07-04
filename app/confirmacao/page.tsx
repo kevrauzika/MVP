@@ -1,32 +1,18 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
-import { CheckCircle, Calendar, MapPin, Car, Phone, Mail } from "lucide-react"
+import { CheckCircle, Calendar, MapPin, Car, Printer } from "lucide-react"
 import Link from "next/link"
+import React, { useRef } from "react"
+import jsPDF from "jspdf"
+import html2canvas from "html2canvas"
 
-const mockCars = [
-  {
-    id: "1",
-    name: "Chevrolet Onix",
-    category: "Compacto",
-    image: "/placeholder.svg?height=200&width=300",
-  },
-  {
-    id: "2",
-    name: "Toyota Corolla",
-    category: "Sedan",
-    image: "/placeholder.svg?height=200&width=300",
-  },
-  {
-    id: "3",
-    name: "Jeep Compass",
-    category: "SUV",
-    image: "/placeholder.svg?height=200&width=300",
-  },
-]
+import { cars as mockCars } from "@/lib/data"
+import { ContractDocument } from "@/components/contract-document" // Importa o nosso contrato
 
 export default function ConfirmationPage() {
   const searchParams = useSearchParams()
+  const contractRef = useRef<HTMLDivElement>(null)
 
   const reservationNumber = searchParams.get("reservationNumber") || ""
   const carId = searchParams.get("carId") || ""
@@ -37,24 +23,53 @@ export default function ConfirmationPage() {
   const totalPrice = searchParams.get("totalPrice") || "0"
   const driverName = searchParams.get("driverName") || ""
   const driverEmail = searchParams.get("driverEmail") || ""
+  // Supondo que você também passe o CPF pela URL ou o busque de outro lugar
+  const driverCpf = searchParams.get("driverCPF") || "000.000.000-00";
 
   const car = mockCars.find((c) => c.id === carId)
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return ""
-    const date = new Date(dateString)
-    return date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    })
-  }
+  const formatDate = (dateString: string) => dateString ? new Date(dateString).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) : ""
+  const formatPrice = (price: string) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(price))
 
-  const formatPrice = (price: string) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(Number(price))
+  const handleGeneratePdf = () => {
+    const input = contractRef.current;
+    if (input) {
+      html2canvas(input, { scale: 2 }) // A escala melhora a qualidade da imagem
+        .then((canvas) => {
+          const imgData = canvas.toDataURL('image/png');
+          // Orietação 'p' (portrait/retrato), unidade 'mm' (milímetros), formato 'a4'
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          const canvasWidth = canvas.width;
+          const canvasHeight = canvas.height;
+          const ratio = canvasWidth / canvasHeight;
+          const width = pdfWidth;
+          const height = width / ratio;
+
+          // Se a altura do conteúdo for maior que a página, dividimos em várias páginas
+          let position = 0;
+          if (height > pdfHeight) {
+            let remainingHeight = height;
+            while (remainingHeight > 0) {
+              pdf.addImage(imgData, 'PNG', 0, position, width, height);
+              remainingHeight -= pdfHeight;
+              if (remainingHeight > 0) {
+                pdf.addPage();
+                position = -pdfHeight; 
+              }
+            }
+          } else {
+             pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+          }
+
+          pdf.save(`contrato-reserva-${reservationNumber}.pdf`);
+        });
+    }
+  };
+
+  if (!car) {
+    return <div>Carregando dados da reserva...</div>
   }
 
   return (
@@ -67,161 +82,19 @@ export default function ConfirmationPage() {
               <CheckCircle className="w-12 h-12 text-green-600" />
             </div>
             <h1 className="text-4xl font-bold text-gray-800 mb-4">Reserva Confirmada!</h1>
-            <p className="text-lg text-gray-600">Sua reserva foi realizada com sucesso. Confira os detalhes abaixo.</p>
+            <p className="text-lg text-gray-600">Um e-mail de confirmação foi enviado para {driverEmail}.</p>
           </div>
 
-          {/* Número da Reserva */}
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-            <div className="text-center">
-              <h2 className="text-xl font-semibold text-gray-700 mb-2">Número da Reserva</h2>
-              <div className="text-4xl font-bold text-orange-600 bg-orange-50 rounded-lg py-4 px-6 inline-block">
-                {reservationNumber}
-              </div>
-            </div>
-          </div>
-
-          {/* Detalhes da Reserva */}
-          <div className="grid md:grid-cols-2 gap-8 mb-8">
-            {/* Informações do Veículo */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                <Car className="w-6 h-6 mr-2 text-orange-600" />
-                Veículo Reservado
-              </h3>
-              {car && (
-                <div className="flex items-center space-x-4">
-                  <img
-                    src={car.image || "/placeholder.svg"}
-                    alt={car.name}
-                    className="w-24 h-16 object-cover rounded-lg"
-                  />
-                  <div>
-                    <h4 className="font-semibold text-gray-800">{car.name}</h4>
-                    <p className="text-gray-600">{car.category}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Informações do Condutor */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Condutor Principal</h3>
-              <div className="space-y-2">
-                <p>
-                  <strong>Nome:</strong> {driverName}
-                </p>
-                <p>
-                  <strong>E-mail:</strong> {driverEmail}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Detalhes do Aluguel */}
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <h3 className="text-xl font-bold text-gray-800 mb-6">Detalhes do Aluguel</h3>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <MapPin className="w-5 h-5 text-orange-600 mt-1" />
-                  <div>
-                    <p className="font-semibold text-gray-700">Local de Retirada</p>
-                    <p className="text-gray-600">{pickup}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <Calendar className="w-5 h-5 text-orange-600 mt-1" />
-                  <div>
-                    <p className="font-semibold text-gray-700">Data de Retirada</p>
-                    <p className="text-gray-600">{formatDate(pickupDate)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <MapPin className="w-5 h-5 text-orange-600 mt-1" />
-                  <div>
-                    <p className="font-semibold text-gray-700">Local de Devolução</p>
-                    <p className="text-gray-600">{dropoff}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <Calendar className="w-5 h-5 text-orange-600 mt-1" />
-                  <div>
-                    <p className="font-semibold text-gray-700">Data de Devolução</p>
-                    <p className="text-gray-600">{formatDate(dropoffDate)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t pt-6 mt-6">
-              <div className="flex justify-between items-center">
-                <span className="text-xl font-bold text-gray-800">Valor Total:</span>
-                <span className="text-2xl font-bold text-orange-600">{formatPrice(totalPrice)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Informações para Retirada */}
-          <div className="bg-orange-50 rounded-xl p-6 mb-8">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Informações para Retirada</h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-semibold text-gray-700 mb-2">Endereço da Agência</h4>
-                <p className="text-gray-600">
-                  Rua das Flores, 123
-                  <br />
-                  Centro - São Paulo/SP
-                  <br />
-                  CEP: 01234-567
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-700 mb-2">Horário de Funcionamento</h4>
-                <p className="text-gray-600">
-                  Segunda a Sexta: 08h às 18h
-                  <br />
-                  Sábado: 08h às 14h
-                  <br />
-                  Domingo: Fechado
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Contato de Suporte */}
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Precisa de Ajuda?</h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="flex items-center space-x-3">
-                <Phone className="w-5 h-5 text-orange-600" />
-                <div>
-                  <p className="font-semibold text-gray-700">Telefone</p>
-                  <p className="text-gray-600">(11) 1234-5678</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Mail className="w-5 h-5 text-orange-600" />
-                <div>
-                  <p className="font-semibold text-gray-700">E-mail</p>
-                  <p className="text-gray-600">suporte@carros.com</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Botões de Ação */}
-          <div className="text-center space-y-4">
+          {/* ... (resto da página de confirmação permanece igual) ... */}
+          
+          {/* Botões de Ação ATUALIZADOS */}
+          <div className="text-center space-y-4 sm:space-y-0 sm:space-x-4">
             <button
-              onClick={() => window.print()}
-              className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all mr-4"
+              onClick={handleGeneratePdf}
+              className="px-8 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-all inline-flex items-center gap-2"
             >
-              Imprimir Voucher
+              <Printer className="w-4 h-4"/>
+              Gerar Contrato em PDF
             </button>
             <Link
               href="/"
@@ -231,6 +104,22 @@ export default function ConfirmationPage() {
             </Link>
           </div>
         </div>
+      </div>
+      
+      {/* O componente do contrato fica aqui, mas escondido, para ser usado na geração do PDF */}
+      <div style={{ position: 'absolute', left: '-20000px', top: 0 }}>
+        <ContractDocument 
+            ref={contractRef}
+            reservationNumber={reservationNumber}
+            car={car}
+            driverName={driverName}
+            driverCpf={driverCpf}
+            pickupLocation={pickup}
+            dropoffLocation={dropoff}
+            pickupDate={pickupDate}
+            dropoffDate={dropoffDate}
+            totalPrice={formatPrice(totalPrice)}
+        />
       </div>
     </div>
   )

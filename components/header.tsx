@@ -11,7 +11,7 @@ export default function Header() {
             <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
               <Car className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-gray-800">CarRental</span>
+            <span className="text-xl font-bold text-gray-800">Celsinho</span>
           </Link>
 
           {/* Navigation */}
